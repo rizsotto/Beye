@@ -1,12 +1,8 @@
 #!/usr/bin/env bash
 
 # RUN: bash %s %T/exclude_files
-# RUN: cd %T/exclude_files; %{scan-build} -o . --exclude src/ignore --intercept-first ./run.sh | ./check.sh
-# RUN: cd %T/exclude_files; %{scan-build} -o . --exclude src/ignore --intercept-first  --override-compiler ./run.sh | ./check.sh
-# RUN: cd %T/exclude_files; %{scan-build} -o . --exclude src/ignore --override-compiler ./run.sh | ./check.sh
-# RUN: cd %T/exclude_files; %{scan-build} -o . --exclude %T/exclude_files/src/ignore --intercept-first ./run.sh | ./check.sh
-# RUN: cd %T/exclude_files; %{scan-build} -o . --exclude %T/exclude_files/src/ignore --intercept-first  --override-compiler ./run.sh | ./check.sh
-# RUN: cd %T/exclude_files; %{scan-build} -o . --exclude %T/exclude_files/src/ignore --override-compiler ./run.sh | ./check.sh
+# RUN: cd %T/exclude_files; %{analyze-build} -o . --cdb input.json --exclude src/ignore | ./check.sh
+# RUN: cd %T/exclude_files; %{analyze-build} -o . --cdb input.json --exclude %T/exclude_files/src/ignore | ./check.sh
 
 set -o errexit
 set -o nounset
@@ -16,7 +12,7 @@ set -o xtrace
 #
 # ${root_dir}
 # ├── check.sh
-# ├── run.sh
+# ├── input.json
 # └── src
 #     ├── empty.c
 #     └── ignore
@@ -29,20 +25,30 @@ mkdir -p "${root_dir}/src/ignore"
 touch "${root_dir}/src/empty.c"
 touch "${root_dir}/src/ignore/empty.c"
 
-build_file="${root_dir}/run.sh"
-cat > ${build_file} << EOF
-#!/usr/bin/env bash
-
-set -o nounset
-set -o xtrace
-
-"\$CC" -c ./src/empty.c -o ./src/empty.o -Dver=1;
-"\$CC" -c "${root_dir}/src/empty.c" -o ./src/empty.o -Dver=2;
-"\$CC" -c ./src/ignore/empty.c -o ./src/ignore/empty.o -Dver=3;
-"\$CC" -c "${root_dir}/src/ignore/empty.c" -o ./src/ignore/empty.o -Dver=4;
-true;
+cat > "${root_dir}/input.json" << EOF
+[
+  {
+    "directory": "${root_dir}",
+    "file": "${root_dir}/src/empty.c",
+    "command": "cc -c ./src/empty.c -o ./src/empty.o -Dver=1"
+  },
+  {
+    "directory": "${root_dir}",
+    "file": "${root_dir}/src/empty.c",
+    "command": "cc -c ./src/empty.c -o ./src/empty.o -Dver=2 -arch i386"
+  },
+  {
+    "directory": "${root_dir}",
+    "file": "${root_dir}/src/ignore/empty.c",
+    "command": "cc -c ./src/ignore/empty.c -o ./src/ignore/empty.o -Dver=3 -arch x86_64"
+  },
+  {
+    "directory": "${root_dir}",
+    "file": "${root_dir}/src/ignore/empty.c",
+    "command": "cc -c ./src/ignore/empty.c -o ./src/ignore/empty.o -Dver=4 -arch ppc"
+  }
+]
 EOF
-chmod +x ${build_file}
 
 checker_file="${root_dir}/check.sh"
 cat > ${checker_file} << EOF

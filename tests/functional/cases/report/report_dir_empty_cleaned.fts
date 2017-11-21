@@ -1,19 +1,49 @@
 #!/usr/bin/env bash
 
-# RUN: mkdir -p %T/output_dir_clean_when_empty
-# RUN: cd %T/output_dir_clean_when_empty; %{scan-build} --output . true | bash %s
-# RUN: cd %T/output_dir_clean_when_empty; %{scan-build} --output . --status-bugs true | bash %s
-# RUN: cd %T/output_dir_clean_when_empty; %{scan-build} --output . --status-bugs false | bash %s
-# RUN: cd %T/output_dir_clean_when_empty; %{scan-build} --output . --status-bugs --plist true | bash %s
-# RUN: cd %T/output_dir_clean_when_empty; %{scan-build} --output . --status-bugs --plist false | bash %s
+# RUN: bash %s %T/output_dir_clean_when_empty
+# RUN: cd %T/output_dir_clean_when_empty; %{analyze-build} --cdb input.json --output . | ./check.sh
+# TODO: cd %T/output_dir_clean_when_empty; %{analyze-build} --cdb input.json --output . --plist | ./check.sh
 
 set -o errexit
 set -o nounset
 set -o xtrace
 
-out_dir=$(sed -n 's/\(.*\) Report directory created: \(.*\)/\2/p')
-if [ -d "$out_dir" ]
+# the test creates a subdirectory inside output dir.
+#
+# ${root_dir}
+# ├── input.json
+# ├── check.sh
+# └── src
+#    └── empty.c
+
+root_dir=$1
+mkdir -p "${root_dir}/src"
+
+touch "${root_dir}/src/empty.c"
+
+cat > "${root_dir}/input.json" << EOF
+[
+    {
+        "directory": "${root_dir}",
+        "file": "${root_dir}/src/empty.c",
+        "command": "cc -c ./src/empty.c -o ./src/empty.o"
+    }
+]
+EOF
+
+checker_file="${root_dir}/check.sh"
+cat > ${checker_file} << EOF
+#!/usr/bin/env bash
+
+set -o errexit
+set -o nounset
+set -o xtrace
+
+out_dir=\$(sed -n 's/\(.*\) Report directory created: \(.*\)/\2/p')
+if [ -d "\$out_dir" ]
 then
     echo "output directory should not exists"
     false
 fi
+EOF
+chmod +x ${checker_file}

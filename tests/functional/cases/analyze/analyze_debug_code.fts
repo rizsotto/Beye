@@ -2,7 +2,7 @@
 
 # XFAIL: *
 # RUN: bash %s %T/debug_code
-# RUN: cd %T/debug_code; %{scan-build} -o . --status-bugs --force-analyze-debug-code ./run.sh
+# RUN: cd %T/debug_code; %{analyze-build} -o . --cdb input.json --status-bugs --force-analyze-debug-code
 
 set -o errexit
 set -o nounset
@@ -11,7 +11,7 @@ set -o xtrace
 # the test creates a subdirectory inside output dir.
 #
 # ${root_dir}
-# ├── run.sh
+# ├── input.json
 # └── src
 #    └── broken.c
 
@@ -27,14 +27,12 @@ cat >> "${root_dir}/src/broken.c" << EOF
 #endif
 EOF
 
-build_file="${root_dir}/run.sh"
-cat > ${build_file} << EOF
-#!/usr/bin/env bash
-
-set -o nounset
-set -o xtrace
-
-"\$CC" -c ./src/broken.c -o ./src/broken.o -DNDEBUG;
-true;
+cat > "${root_dir}/input.json" << EOF
+[
+  {
+    "directory": "${root_dir}",
+    "file": "${root_dir}/src/broken.c",
+    "command": "cc -c ./src/broken.c -o ./src/broken.o"
+  }
+]
 EOF
-chmod +x ${build_file}
