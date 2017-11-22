@@ -4,13 +4,13 @@
 # This file is distributed under the University of Illinois Open Source
 # License. See LICENSE.TXT for details.
 
-import libear
 import libscanbuild.analyze as sut
 import unittest
 import os
 import os.path
 import glob
 import platform
+from test_fixture import temporary_directory
 
 IS_WINDOWS = os.getenv('windows')
 
@@ -125,8 +125,8 @@ class RunAnalyzerTest(unittest.TestCase):
 
     @staticmethod
     def run_analyzer(content, failures_report):
-        with libear.temporary_directory() as tmpdir:
-            filename = os.path.join(tmpdir, 'test.cpp')
+        with temporary_directory() as tmp_dir:
+            filename = os.path.join(tmp_dir, 'test.cpp')
             with open(filename, 'w') as handle:
                 handle.write(content)
 
@@ -136,7 +136,7 @@ class RunAnalyzerTest(unittest.TestCase):
                 'flags': [],
                 'direct_args': [],
                 'source': filename,
-                'output_dir': tmpdir,
+                'output_dir': tmp_dir,
                 'output_format': 'plist',
                 'output_failures': failures_report
             }
@@ -169,7 +169,7 @@ class ReportFailureTest(unittest.TestCase):
         self.assertEqual('failures', os.path.basename(os.path.dirname(path)))
 
     def test_report_failure_create_files(self):
-        with libear.temporary_directory() as tmp_dir:
+        with temporary_directory() as tmp_dir:
             # create input file
             filename = os.path.join(tmp_dir, 'test.c')
             with open(filename, 'w') as handle:
@@ -331,7 +331,7 @@ class ReportDirectoryTest(unittest.TestCase):
     # scan-build can be easily matched up to compare results.
     @unittest.skipIf(IS_WINDOWS, 'windows has low resolution timer')
     def test_directory_name_comparison(self):
-        with libear.temporary_directory() as tmp_dir, \
+        with temporary_directory() as tmp_dir, \
              sut.report_directory(tmp_dir, False) as report_dir1, \
              sut.report_directory(tmp_dir, False) as report_dir2, \
              sut.report_directory(tmp_dir, False) as report_dir3:

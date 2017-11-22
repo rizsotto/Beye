@@ -11,7 +11,7 @@ import collections
 import logging
 import json
 import subprocess
-from typing import List, Iterable, Dict, Tuple, Type, Any  # noqa: ignore=F401
+from typing import List, Iterable, Dict, Tuple, Type  # noqa: ignore=F401
 
 from libscanbuild import Execution, shell_split, run_command
 
@@ -121,18 +121,6 @@ class Compilation:
         """ This method dumps the object attributes into a dictionary. """
 
         return vars(self)
-
-    def as_db_entry(self):
-        # type: (Compilation) -> Dict[str, Any]
-        """ This method creates a compilation database entry. """
-
-        relative = os.path.relpath(self.source, self.directory)
-        compiler = 'cc' if self.compiler == 'c' else 'c++'
-        return {
-            'file': relative,
-            'arguments': [compiler, '-c'] + self.flags + [relative],
-            'directory': self.directory
-        }
 
     @classmethod
     def from_db_entry(cls, entry):
@@ -276,18 +264,6 @@ class Compilation:
 
 class CompilationDatabase:
     """ Compilation Database persistence methods. """
-
-    @staticmethod
-    def save(filename, iterator):
-        # type: (str, Iterable[Compilation]) -> None
-        """ Saves compilations to given file.
-
-        :param filename: the destination file name
-        :param iterator: iterator of Compilation objects. """
-
-        entries = [entry.as_db_entry() for entry in iterator]
-        with open(filename, 'w') as handle:
-            json.dump(entries, handle, sort_keys=True, indent=4)
 
     @staticmethod
     def load(filename):

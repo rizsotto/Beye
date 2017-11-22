@@ -14,7 +14,6 @@ To run the static analyzer against a build is done in multiple steps:
 import re
 import os
 import os.path
-import json
 import logging
 import multiprocessing
 import tempfile
@@ -24,52 +23,16 @@ import platform
 import contextlib
 import datetime
 import argparse  # noqa: ignore=F401
-from typing import Any, Dict, List, Callable, Iterable, Generator  # noqa: ignore=F401
+from typing import Any, Dict, List, Iterable, Generator  # noqa: ignore=F401
+from libscanbuild.compilation import Compilation  # noqa: ignore=F401
 
-from libscanbuild import command_entry_point, wrapper_entry_point, \
-    wrapper_environment, run_build, run_command
-from libscanbuild.arguments import parse_args_for_scan_build, \
-    parse_args_for_analyze_build
-from libscanbuild.intercept import capture
+from libscanbuild import command_entry_point, run_command
+from libscanbuild.arguments import parse_args_for_analyze_build
 from libscanbuild.report import document
-from libscanbuild.compilation import Compilation, classify_source, \
-    CompilationDatabase
+from libscanbuild.compilation import classify_source, CompilationDatabase
 from libscanbuild.clang import get_version, get_arguments
-from libscanbuild import Execution  # noqa: ignore=F401
 
-__all__ = ['scan_build', 'analyze_build', 'analyze_compiler_wrapper']
-
-COMPILER_WRAPPER_CC = 'analyze-cc'
-COMPILER_WRAPPER_CXX = 'analyze-c++'
-ENVIRONMENT_KEY = 'ANALYZE_BUILD'
-
-
-@command_entry_point
-def scan_build():
-    # type: () -> int
-    """ Entry point for scan-build command. """
-
-    args = parse_args_for_scan_build()
-    # will re-assign the report directory as new output
-    with report_directory(args.output, args.keep_empty) as args.output:
-        # run against a build command. there are cases, when analyzer run
-        # is not required. but we need to set up everything for the
-        # wrappers, because 'configure' needs to capture the CC/CXX values
-        # for the Makefile.
-        if args.intercept_first:
-            # run build command with intercept module
-            exit_code, compilations = capture(args)
-            if need_analyzer(args.build):
-                # run the analyzer against the captured commands
-                run_analyzer_parallel(compilations, args)
-        else:
-            # run build command and analyzer with compiler wrappers
-            environment = setup_environment(args)
-            exit_code = run_build(args.build, env=environment)
-        # cover report generation and bug counting
-        number_of_bugs = document(args)
-        # set exit status as it was requested
-        return number_of_bugs if args.status_bugs else exit_code
+__all__ = ['analyze_build']
 
 
 @command_entry_point
@@ -87,20 +50,6 @@ def analyze_build():
         number_of_bugs = document(args)
         # set exit status as it was requested
         return number_of_bugs if args.status_bugs else 0
-
-
-def need_analyzer(args):
-    # type: (str) -> bool
-    """ Check the intent of the build command.
-
-    When static analyzer run against project configure step, it should be
-    silent and no need to run the analyzer or generate report.
-
-    To run `scan-build` against the configure step might be necessary,
-    when compiler wrappers are used. That's the moment when build setup
-    check the compiler and capture the location for the build process. """
-
-    return len(args) > 0 and not re.search('configure|autogen', args[0])
 
 
 def analyze_parameters(args):
@@ -183,46 +132,6 @@ def run_analyzer_parallel(compilations, args):
         logging_analyzer_output(current)
     pool.close()
     pool.join()
-
-
-def setup_environment(args):
-    # type: (argparse.Namespace) -> Dict[str, str]
-    """ Set up environment for build command to interpose compiler wrapper. """
-
-    environment = dict(os.environ)
-    # to run compiler wrappers
-    environment.update(wrapper_environment(args))
-    environment.update({
-        'CC': COMPILER_WRAPPER_CC,
-        'CXX': COMPILER_WRAPPER_CXX
-    })
-    # pass the relevant parameters to run the analyzer with condition.
-    # the presence of the environment value will control the run.
-    if need_analyzer(args.build):
-        environment.update({
-            ENVIRONMENT_KEY: json.dumps(analyze_parameters(args))
-        })
-    else:
-        logging.debug('wrapper should not run analyzer')
-    return environment
-
-
-@command_entry_point
-@wrapper_entry_point
-def analyze_compiler_wrapper(result, execution):
-    # type: (int, Execution) -> None
-    """ Entry point for `analyze-cc` and `analyze-c++` compiler wrappers. """
-
-    # don't run analyzer when compilation fails. or when it's not requested.
-    if result or not os.getenv(ENVIRONMENT_KEY):
-        return
-    # collect the needed parameters from environment
-    parameters = json.loads(os.environ[ENVIRONMENT_KEY])
-    # don't run analyzer when the command is not a compilation.
-    # (filtering non compilations is done by the generator.)
-    for compilation in Compilation.iter_from_execution(execution):
-        current = dict(compilation.as_dict(), **parameters)
-        logging_analyzer_output(run(current))
 
 
 @contextlib.contextmanager

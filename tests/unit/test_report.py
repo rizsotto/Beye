@@ -4,18 +4,18 @@
 # This file is distributed under the University of Illinois Open Source
 # License. See LICENSE.TXT for details.
 
-import libear
 import libscanbuild.report as sut
 import unittest
 import os
 import os.path
 import glob
+from test_fixture import temporary_directory
 
 IS_WINDOWS = os.getenv('windows')
 
 
 def run_bug_parse(content):
-    with libear.temporary_directory() as tmp_dir:
+    with temporary_directory() as tmp_dir:
         file_name = os.path.join(tmp_dir, 'test.html')
         with open(file_name, 'w') as handle:
             lines = (line + os.linesep for line in content)
@@ -25,7 +25,7 @@ def run_bug_parse(content):
 
 
 def run_crash_parse(content, prefix):
-    with libear.temporary_directory() as tmp_dir:
+    with temporary_directory() as tmp_dir:
         file_name = os.path.join(tmp_dir, prefix + '.info.txt')
         with open(file_name, 'w') as handle:
             lines = (line + os.linesep for line in content)
@@ -81,7 +81,7 @@ class ParseFileTest(unittest.TestCase):
 
     def test_parse_real_crash(self):
         import libscanbuild.analyze as sut2
-        with libear.temporary_directory() as tmp_dir:
+        with temporary_directory() as tmp_dir:
             filename = os.path.join(tmp_dir, 'test.c')
             with open(filename, 'w') as handle:
                 handle.write('int main() { return 0')

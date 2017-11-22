@@ -6,7 +6,6 @@
 """ This module is a collection of methods commonly used in this project. """
 import collections
 import functools
-import json
 import logging
 import os
 import os.path
@@ -15,7 +14,7 @@ import shlex
 import subprocess
 import sys
 
-from typing import List, Any, Dict, Callable  # noqa: ignore=F401
+from typing import List, Any, Callable  # noqa: ignore=F401
 
 ENVIRONMENT_KEY = 'INTERCEPT_BUILD'
 
@@ -35,20 +34,6 @@ def shell_split(string):
         return re.sub(r'\\([\\ $%&\(\)\[\]\{\}\*|<>@?!])', r'\1', arg)
 
     return [unescape(token) for token in shlex.split(string)]
-
-
-def run_build(command, *args, **kwargs):
-    # type: (...) -> int
-    """ Run and report build command execution
-
-    :param command: list of tokens
-    :return: exit code of the process
-    """
-    environment = kwargs.get('env', os.environ)
-    logging.debug('run build %s, in environment: %s', command, environment)
-    exit_code = subprocess.call(command, *args, **kwargs)
-    logging.debug('build finished with exit code: %d', exit_code)
-    return exit_code
 
 
 def run_command(command, cwd=None):
@@ -140,79 +125,3 @@ def command_entry_point(function):
             logging.shutdown()
 
     return wrapper
-
-
-def wrapper_entry_point(function):
-    # type: (Callable[[int, Execution], None]) -> Callable[[], int]
-    """ Implements compiler wrapper base functionality.
-
-    A compiler wrapper executes the real compiler, then implement some
-    functionality, then returns with the real compiler exit code.
-
-    :param function: the extra functionality what the wrapper want to
-    do on top of the compiler call. If it throws exception, it will be
-    caught and logged.
-    :return: the exit code of the real compiler.
-
-    The :param function: will receive the following arguments:
-
-    :param result:       the exit code of the compilation.
-    :param execution:    the command executed by the wrapper. """
-
-    def is_cxx_wrapper():
-        # type: () -> bool
-        """ Find out was it a C++ compiler call. Compiler wrapper names
-        contain the compiler type. C++ compiler wrappers ends with `c++`,
-        but might have `.exe` extension on windows. """
-
-        wrapper_command = os.path.basename(sys.argv[0])
-        return True if re.match(r'(.+)c\+\+(.*)', wrapper_command) else False
-
-    def run_compiler(executable):
-        # type: (List[str]) -> int
-        """ Execute compilation with the real compiler. """
-
-        command = executable + sys.argv[1:]
-        logging.debug('compilation: %s', command)
-        result = subprocess.call(command)
-        logging.debug('compilation exit code: %d', result)
-        return result
-
-    @functools.wraps(function)
-    def wrapper():
-        # type: () -> int
-        """ It executes the compilation and calls the wrapped method. """
-
-        # get relevant parameters from environment
-        parameters = json.loads(os.environ[ENVIRONMENT_KEY])
-        reconfigure_logging(parameters['verbose'])
-        # execute the requested compilation and crash if anything goes wrong
-        cxx = is_cxx_wrapper()
-        compiler = parameters['cxx'] if cxx else parameters['cc']
-        result = run_compiler(compiler)
-        # call the wrapped method and ignore it's return value
-        try:
-            call = Execution(
-                pid=os.getpid(),
-                cwd=os.getcwd(),
-                cmd=['c++' if cxx else 'cc'] + sys.argv[1:])
-            function(result, call)
-        except (OSError, subprocess.CalledProcessError):
-            logging.exception('Compiler wrapper failed complete.')
-        # always return the real compiler exit code
-        return result
-
-    return wrapper
-
-
-def wrapper_environment(args):
-    # type: (...) -> Dict[str, str]
-    """ Set up environment for interpose compiler wrapper."""
-
-    return {
-        ENVIRONMENT_KEY: json.dumps({
-            'verbose': args.verbose,
-            'cc': shell_split(args.cc),
-            'cxx': shell_split(args.cxx)
-        })
-    }

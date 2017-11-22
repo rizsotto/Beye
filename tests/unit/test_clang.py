@@ -4,10 +4,10 @@
 # This file is distributed under the University of Illinois Open Source
 # License. See LICENSE.TXT for details.
 
-import libear
 import libscanbuild.clang as sut
 import unittest
 import os.path
+from test_fixture import temporary_directory
 
 
 class ClangGetVersion(unittest.TestCase):
@@ -21,14 +21,14 @@ class ClangGetVersion(unittest.TestCase):
 
 class ClangGetArgumentsTest(unittest.TestCase):
     def test_get_clang_arguments(self):
-        with libear.temporary_directory() as tmpdir:
-            filename = os.path.join(tmpdir, 'test.c')
+        with temporary_directory() as tmp_dir:
+            filename = os.path.join(tmp_dir, 'test.c')
             with open(filename, 'w') as handle:
                 handle.write('')
 
             result = sut.get_arguments(
                 ['clang', '-c', filename, '-DNDEBUG', '-Dvar="this is it"'],
-                tmpdir)
+                tmp_dir)
 
             self.assertTrue('NDEBUG' in result)
             self.assertTrue('var="this is it"' in result)
