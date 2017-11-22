@@ -4,29 +4,26 @@
 from setuptools import setup
 
 setup(
-    name='scan-build',
+    name='analyze-build',
     version='2.0.11',
     author='László Nagy',
     author_email='rizsotto@gmail.com',
-    keywords=['Clang', 'scan-build', 'static analyzer'],
+    keywords=['Clang', 'static analyzer'],
     url='https://github.com/rizsotto/scan-build',
     license='LICENSE.txt',
-    description='static code analyzer wrapper for Clang.',
+    description='Clang-SA (static analyzer) wrapper.',
     long_description=open('README.rst').read(),
     zip_safe=False,
     install_requires=['typing'],
-    packages=['libscanbuild', 'libear'],
-    package_data={'libscanbuild': ['resources/*'],
-                  'libear': ['config.h.in', 'ear.c']},
+    packages=['libscanbuild'],
+    package_data={
+        'libscanbuild': [
+            'resources/*'
+        ]
+    },
     entry_points={
         'console_scripts': [
-            'scan-build = libscanbuild.analyze:scan_build',
-            'analyze-build = libscanbuild.analyze:analyze_build',
-            'analyze-cc = libscanbuild.analyze:analyze_compiler_wrapper',
-            'analyze-c++ = libscanbuild.analyze:analyze_compiler_wrapper',
-            'intercept-build = libscanbuild.intercept:intercept_build',
-            'intercept-cc = libscanbuild.intercept:intercept_compiler_wrapper',
-            'intercept-c++ = libscanbuild.intercept:intercept_compiler_wrapper'
+            'analyze-build = libscanbuild.analyze:analyze_build'
         ]
     },
     classifiers=[
