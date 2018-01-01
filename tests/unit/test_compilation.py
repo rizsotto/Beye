@@ -51,12 +51,6 @@ class CompilerTest(unittest.TestCase):
         self.assert_c_compiler(['gxlc'])
         self.assert_cxx_compiler(['gxlc++'])
 
-    # def test_open_mpi_compiler_call(self):
-    #     self.assert_c_compiler(['mpicc'])
-    #     self.assert_cxx_compiler(['mpiCC'])
-    #     self.assert_cxx_compiler(['mpicxx'])
-    #     self.assert_cxx_compiler(['mpic++'])
-
     def test_compiler_call_with_path(self):
         self.assert_c_compiler(['/usr/local/bin/gcc'])
         self.assert_cxx_compiler(['/usr/local/bin/g++'])
@@ -64,14 +58,6 @@ class CompilerTest(unittest.TestCase):
 
     def test_cross_compiler_call(self):
         self.assert_cxx_compiler(['armv7_neno-linux-gnueabi-g++'])
-
-    def test_compiler_wrapper_call(self):
-        self.assert_c_compiler(['distcc'])
-        self.assert_c_compiler(['distcc', 'cc'])
-        self.assert_cxx_compiler(['distcc', 'c++'])
-        self.assert_c_compiler(['ccache'])
-        self.assert_c_compiler(['ccache', 'cc'])
-        self.assert_cxx_compiler(['ccache', 'c++'])
 
     def test_non_compiler_call(self):
         self.assert_not_compiler([])
@@ -92,15 +78,6 @@ class CompilerTest(unittest.TestCase):
         value = sut.Compilation._split_compiler(command, 'nope', 'nope')
         self.assertIsNotNone(value)
         self.assertEqual(expected, value[1])
-
-    def test_argument_split(self):
-        arguments = ['-c', 'file.c']
-        self.assert_arguments_equal(arguments, ['distcc'] + arguments)
-        self.assert_arguments_equal(arguments, ['distcc', 'cc'] + arguments)
-        self.assert_arguments_equal(arguments, ['distcc', 'c++'] + arguments)
-        self.assert_arguments_equal(arguments, ['ccache'] + arguments)
-        self.assert_arguments_equal(arguments, ['ccache', 'cc'] + arguments)
-        self.assert_arguments_equal(arguments, ['ccache', 'c++'] + arguments)
 
 
 class SplitTest(unittest.TestCase):

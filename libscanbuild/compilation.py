@@ -10,7 +10,6 @@ import os
 import collections
 import logging
 import json
-import subprocess
 from typing import List, Iterable, Dict, Tuple, Type  # noqa: ignore=F401
 
 from libscanbuild import Execution, shell_split, run_command
@@ -61,12 +60,6 @@ IGNORED_FLAGS = {
     '-EHa': 0
 
 }  # type: Dict[str, int]
-
-# Known C/C++ compiler wrapper name patterns.
-COMPILER_PATTERN_WRAPPER = re.compile(r'^(distcc|ccache)$')
-
-# Known MPI compiler wrapper name patterns.
-COMPILER_PATTERNS_MPI_WRAPPER = re.compile(r'^mpi(cc|cxx|CC|c\+\+)$')
 
 # Known C compiler executable name patterns.
 COMPILER_PATTERNS_CC = (
@@ -177,14 +170,6 @@ class Compilation:
         :return: None if the command is not a compilation, or a tuple
                 (compiler_language, rest of the command) otherwise """
 
-        def is_wrapper(cmd):
-            # type: (str) -> bool
-            return True if COMPILER_PATTERN_WRAPPER.match(cmd) else False
-
-        def is_mpi_wrapper(cmd):
-            # type: (str) -> bool
-            return True if COMPILER_PATTERNS_MPI_WRAPPER.match(cmd) else False
-
         def is_c_compiler(cmd):
             # type: (str) -> bool
             return os.path.basename(cc) == cmd or \
@@ -198,19 +183,8 @@ class Compilation:
         if command:  # not empty list will allow to index '0' and '1:'
             executable = os.path.basename(command[0])  # type: str
             parameters = command[1:]  # type: List[str]
-            # 'wrapper' 'parameters' and
-            # 'wrapper' 'compiler' 'parameters' are valid.
-            # Additionally, a wrapper can wrap another wrapper.
-            if is_wrapper(executable):
-                result = cls._split_compiler(parameters, cc, cxx)
-                # Compiler wrapper without compiler is a 'C' compiler.
-                return ('c', parameters) if result is None else result
-            # MPI compiler wrappers add extra parameters
-            elif is_mpi_wrapper(executable):
-                mpi_call = get_mpi_call(executable)  # type: List[str]
-                return cls._split_compiler(mpi_call + parameters, cc, cxx)
             # and 'compiler' 'parameters' is valid.
-            elif is_c_compiler(executable):
+            if is_c_compiler(executable):
                 return 'c', parameters
             elif is_cxx_compiler(executable):
                 return 'c++', parameters
@@ -309,19 +283,3 @@ def classify_source(filename, c_compiler=True):
 
     __, extension = os.path.splitext(os.path.basename(filename))
     return mapping.get(extension)
-
-
-def get_mpi_call(wrapper):
-    # type: (str) -> List[str]
-    """ Provide information on how the underlying compiler would have been
-    invoked without the MPI compiler wrapper. """
-
-    for query_flags in [['-show'], ['--showme']]:
-        try:
-            output = run_command([wrapper] + query_flags)
-            if output:
-                return shell_split(output[0])
-        except subprocess.CalledProcessError:
-            pass
-    # Fail loud
-    raise RuntimeError("Could not determinate MPI flags.")
