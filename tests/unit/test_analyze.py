@@ -25,6 +25,70 @@ class Spy(object):
         return self.success
 
 
+class CompilerTest(unittest.TestCase):
+
+    @staticmethod
+    def compiler_name(arguments):
+        spy = Spy()
+        opts = {'arguments': [arguments, '-c', 'source.c']}
+        sut.compiler_name(opts, spy.call)
+        return spy.arg
+
+    def assert_compiler(self, expected, arguments):
+        result = CompilerTest.compiler_name(arguments)
+        self.assertEqual(expected, result['compiler'])
+
+    def assert_c_compiler(self, command):
+        self.assert_compiler('c', command)
+
+    def assert_cxx_compiler(self, command):
+        self.assert_compiler('c++', command)
+
+    def assert_not_compiler(self, command):
+        self.assert_compiler(None, command)
+
+    def test_compiler_call(self):
+        self.assert_c_compiler('cc')
+        self.assert_cxx_compiler('CC')
+        self.assert_cxx_compiler('c++')
+        self.assert_cxx_compiler('cxx')
+
+    def test_clang_compiler_call(self):
+        self.assert_c_compiler('clang')
+        self.assert_c_compiler('clang-3.6')
+        self.assert_cxx_compiler('clang++')
+        self.assert_cxx_compiler('clang++-3.5.1')
+
+    def test_gcc_compiler_call(self):
+        self.assert_c_compiler('gcc')
+        self.assert_cxx_compiler('g++')
+
+    def test_intel_compiler_call(self):
+        self.assert_c_compiler('icc')
+        self.assert_cxx_compiler('icpc')
+
+    def test_aix_compiler_call(self):
+        self.assert_c_compiler('xlc')
+        self.assert_cxx_compiler('xlc++')
+        self.assert_cxx_compiler('xlC')
+        self.assert_c_compiler('gxlc')
+        self.assert_cxx_compiler('gxlc++')
+
+    def test_compiler_call_with_path(self):
+        self.assert_c_compiler('/usr/local/bin/gcc')
+        self.assert_cxx_compiler('/usr/local/bin/g++')
+        self.assert_c_compiler('/usr/local/bin/clang')
+
+    def test_cross_compiler_call(self):
+        self.assert_cxx_compiler('armv7_neno-linux-gnueabi-g++')
+
+    def test_non_compiler_call(self):
+        self.assert_not_compiler('')
+        self.assert_not_compiler('ld')
+        self.assert_not_compiler('as')
+        self.assert_not_compiler('/usr/local/bin/compiler')
+
+
 class FilteringFlagsTest(unittest.TestCase):
 
     @staticmethod
@@ -135,7 +199,7 @@ class RunAnalyzerTest(unittest.TestCase):
                 'directory': os.getcwd(),
                 'flags': [],
                 'direct_args': [],
-                'source': filename,
+                'file': filename,
                 'output_dir': tmp_dir,
                 'output_format': 'plist',
                 'output_failures': failures_report
@@ -181,7 +245,7 @@ class ReportFailureTest(unittest.TestCase):
                 'clang': 'clang',
                 'directory': os.getcwd(),
                 'flags': [],
-                'source': filename,
+                'file': filename,
                 'output_dir': tmp_dir,
                 'language': 'c',
                 'error_output': error_msg,
@@ -224,7 +288,7 @@ class AnalyzerTest(unittest.TestCase):
     def test_set_language_fall_through(self):
         def language(expected, input):
             spy = Spy()
-            input.update({'compiler': 'c', 'source': 'test.c'})
+            input.update({'compiler': 'c', 'file': 'test.c'})
             self.assertEqual(spy.success, sut.language_check(input, spy.call))
             self.assertEqual(expected, spy.arg['language'])
 
@@ -236,7 +300,7 @@ class AnalyzerTest(unittest.TestCase):
         input = {
             'compiler': 'c',
             'flags': [],
-            'source': 'test.java',
+            'file': 'test.java',
             'language': 'java'
         }
         self.assertEquals(dict(), sut.language_check(input, spy.call))
@@ -245,7 +309,7 @@ class AnalyzerTest(unittest.TestCase):
     def test_set_language_sets_flags(self):
         def flags(expected, input):
             spy = Spy()
-            input.update({'compiler': 'c', 'source': 'test.c'})
+            input.update({'compiler': 'c', 'file': 'test.c'})
             self.assertEqual(spy.success, sut.language_check(input, spy.call))
             self.assertEqual(expected, spy.arg['flags'])
 
@@ -259,13 +323,13 @@ class AnalyzerTest(unittest.TestCase):
             self.assertEqual(spy.success, sut.language_check(input, spy.call))
             self.assertEqual(expected, spy.arg['language'])
 
-        language('c',   {'source': 'file.c',   'compiler': 'c'})
-        language('c++', {'source': 'file.c',   'compiler': 'c++'})
-        language('c++', {'source': 'file.cxx', 'compiler': 'c'})
-        language('c++', {'source': 'file.cxx', 'compiler': 'c++'})
-        language('c++', {'source': 'file.cpp', 'compiler': 'c++'})
-        language('c-cpp-output',   {'source': 'file.i', 'compiler': 'c'})
-        language('c++-cpp-output', {'source': 'file.i', 'compiler': 'c++'})
+        language('c',   {'file': 'file.c',   'compiler': 'c'})
+        language('c++', {'file': 'file.c',   'compiler': 'c++'})
+        language('c++', {'file': 'file.cxx', 'compiler': 'c'})
+        language('c++', {'file': 'file.cxx', 'compiler': 'c++'})
+        language('c++', {'file': 'file.cpp', 'compiler': 'c++'})
+        language('c-cpp-output',   {'file': 'file.i', 'compiler': 'c'})
+        language('c++-cpp-output', {'file': 'file.i', 'compiler': 'c++'})
 
     def test_arch_loop_sets_flags(self):
         def flags(archs):

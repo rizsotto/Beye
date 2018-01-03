@@ -4,7 +4,6 @@
 # This file is distributed under the University of Illinois Open Source
 # License. See LICENSE.TXT for details.
 """ This module is a collection of methods commonly used in this project. """
-import collections
 import functools
 import logging
 import os
@@ -15,10 +14,6 @@ import subprocess
 import sys
 
 from typing import List, Any, Callable  # noqa: ignore=F401
-
-ENVIRONMENT_KEY = 'INTERCEPT_BUILD'
-
-Execution = collections.namedtuple('Execution', ['pid', 'cwd', 'cmd'])
 
 
 def shell_split(string):

@@ -17,6 +17,7 @@ import os.path
 import logging
 import multiprocessing
 import tempfile
+import json
 import functools
 import subprocess
 import platform
@@ -24,15 +25,20 @@ import contextlib
 import datetime
 import argparse  # noqa: ignore=F401
 from typing import Any, Dict, List, Iterable, Generator  # noqa: ignore=F401
-from libscanbuild.compilation import Compilation  # noqa: ignore=F401
+from typing import Optional  # noqa: ignore=F401
 
-from libscanbuild import command_entry_point, run_command
+from libscanbuild import shell_split, command_entry_point, run_command
 from libscanbuild.arguments import parse_args_for_analyze_build
 from libscanbuild.report import document
-from libscanbuild.compilation import classify_source, CompilationDatabase
 from libscanbuild.clang import get_version, get_arguments
 
-__all__ = ['analyze_build']
+# Keyword constants
+COMMAND = 'command'
+ARGUMENTS = 'arguments'
+DIRECTORY = 'directory'
+SOURCE = 'file'
+FLAGS = 'flags'
+EXCLUDES = 'excludes'
 
 
 @command_entry_point
@@ -44,12 +50,24 @@ def analyze_build():
     # will re-assign the report directory as new output
     with report_directory(args.output, args.keep_empty) as args.output:
         # run the analyzer against a compilation db
-        compilations = CompilationDatabase.load(args.cdb)
+        compilations = load_compilation_database(args.cdb)
         run_analyzer_parallel(compilations, args)
         # cover report generation and bug counting
         number_of_bugs = document(args)
         # set exit status as it was requested
         return number_of_bugs if args.status_bugs else 0
+
+
+def load_compilation_database(filename):
+    # type: (str) -> Iterable[Dict[str, Any]]
+    """ Load compilations from file.
+
+    :param filename: the file to read from
+    :returns: iterator of Compilation objects. """
+
+    with open(filename, 'r') as handle:
+        for entry in json.load(handle):
+            yield entry
 
 
 def analyze_parameters(args):
@@ -114,18 +132,24 @@ def analyze_parameters(args):
         'output_failures': args.output_failures,
         'direct_args': direct_args(args),
         'force_debug': args.force_debug,
-        'excludes': args.excludes
+        EXCLUDES: args.excludes
     }
 
 
 def run_analyzer_parallel(compilations, args):
-    # type: (Iterable[Compilation], argparse.Namespace) -> None
+    # type: (Iterable[Dict[str, Any]], argparse.Namespace) -> None
     """ Runs the analyzer against the given compilations. """
+
+    def logging_analyzer_output(current):
+        # type: (Dict[str, Any]) -> None
+        """ Display error message from analyzer. """
+        if current and 'error_output' in current:
+            for line in current['error_output']:
+                logging.info(line)
 
     logging.debug('run analyzer against compilation database')
     consts = analyze_parameters(args)
-    parameters = (dict(compilation.as_dict(), **consts)
-                  for compilation in compilations)
+    parameters = (dict(compilation, **consts) for compilation in compilations)
     # when verbose output requested execute sequentially
     pool = multiprocessing.Pool(1 if args.verbose > 2 else None)
     for current in pool.imap_unordered(run, parameters):
@@ -187,18 +211,7 @@ def require(required):
     return decorator
 
 
-@require(['flags',  # entry from compilation
-          'compiler',  # entry from compilation
-          'directory',  # entry from compilation
-          'source',  # entry from compilation
-          'clang',  # clang executable name (and path)
-          'direct_args',  # arguments from command line
-          'excludes',  # list of directories
-          'force_debug',  # kill non debug macros
-          'output_dir',  # where generated report files shall go
-          'output_format',  # it's 'plist', 'html', 'plist-html',
-                            # 'text' or 'plist-multi-file'
-          'output_failures'])  # generate crash reports or not
+@require([SOURCE])
 def run(opts):
     # type: (Dict[str, Any]) -> Dict[str, Any]
     """ Entry point to run (or not) static analyzer against a single entry
@@ -213,21 +226,11 @@ def run(opts):
     decorator. It's like an 'assert' to check the contract between the
     caller and the called method.) """
 
-    command = [opts['compiler'], '-c'] + opts['flags'] + [opts['source']]
-    logging.debug("Run analyzer against '%s'", command)
-    return exclude(opts)
+    logging.debug("Run analyzer against '%s'", opts[SOURCE])
+    return validate_db_entry(opts)
 
 
-def logging_analyzer_output(opts):
-    # type: (Dict[str, Any]) -> None
-    """ Display error message from analyzer. """
-
-    if opts and 'error_output' in opts:
-        for line in opts['error_output']:
-            logging.info(line)
-
-
-@require(['clang', 'directory', 'flags', 'source', 'output_dir', 'language',
+@require(['clang', 'directory', FLAGS, SOURCE, 'output_dir', 'language',
           'error_output', 'exit_code'])
 def report_failure(opts):
     # type: (Dict[str, Any]) -> None
@@ -267,11 +270,11 @@ def report_failure(opts):
     try:
         cwd = opts['directory']
         cmd = get_arguments([opts['clang'], '-fsyntax-only', '-E'] +
-                            opts['flags'] + [opts['source'], '-o', name], cwd)
+                            opts[FLAGS] + [opts[SOURCE], '-o', name], cwd)
         run_command(cmd, cwd=cwd)
         # write general information about the crash
         with open(name + '.info.txt', 'w') as handle:
-            handle.write(opts['source'] + os.linesep)
+            handle.write(opts[SOURCE] + os.linesep)
             handle.write(error.title().replace('_', ' ') + os.linesep)
             handle.write(' '.join(cmd) + os.linesep)
             handle.write(' '.join(platform.uname()) + os.linesep)
@@ -286,7 +289,7 @@ def report_failure(opts):
         logging.warning('failed to report failure', exc_info=True)
 
 
-@require(['clang', 'directory', 'flags', 'direct_args', 'source', 'output_dir',
+@require(['clang', 'directory', FLAGS, 'direct_args', SOURCE, 'output_dir',
           'output_format'])
 def run_analyzer(opts, continuation=report_failure):
     # type: (...) -> Dict[str, Any]
@@ -308,8 +311,8 @@ def run_analyzer(opts, continuation=report_failure):
     try:
         cwd = opts['directory']
         cmd = get_arguments([opts['clang'], '--analyze'] +
-                            opts['direct_args'] + opts['flags'] +
-                            [opts['source'], '-o', target()],
+                            opts['direct_args'] + opts[FLAGS] +
+                            [opts[SOURCE], '-o', target()],
                             cwd)
         output = run_command(cmd, cwd=cwd)
         return {'error_output': output, 'exit_code': 0}
@@ -325,19 +328,19 @@ def run_analyzer(opts, continuation=report_failure):
         return result
 
 
-@require(['flags', 'force_debug'])
+@require([FLAGS, 'force_debug'])
 def filter_debug_flags(opts, continuation=run_analyzer):
     # type: (...) -> Dict[str, Any]
     """ Filter out nondebug macros when requested. """
 
     if opts.pop('force_debug'):
         # lazy implementation just append an undefine macro at the end
-        opts.update({'flags': opts['flags'] + ['-UNDEBUG']})
+        opts.update({FLAGS: opts[FLAGS] + ['-UNDEBUG']})
 
     return continuation(opts)
 
 
-@require(['language', 'compiler', 'source', 'flags'])
+@require(['language', 'compiler', SOURCE, FLAGS])
 def language_check(opts, continuation=filter_debug_flags):
     # type: (...) -> Dict[str, Any]
     """ Find out the language from command line parameters or file name
@@ -353,7 +356,7 @@ def language_check(opts, continuation=filter_debug_flags):
     compiler = opts.pop('compiler')
     # ... or find out from source file extension
     if language is None and compiler is not None:
-        language = classify_source(opts['source'], compiler == 'c')
+        language = classify_source(opts[SOURCE], compiler == 'c')
 
     if language is None:
         logging.debug('skip analysis, language not known')
@@ -364,11 +367,11 @@ def language_check(opts, continuation=filter_debug_flags):
 
     logging.debug('analysis, language: %s', language)
     opts.update({'language': language,
-                 'flags': ['-x', language] + opts['flags']})
+                 FLAGS: ['-x', language] + opts[FLAGS]})
     return continuation(opts)
 
 
-@require(['arch_list', 'flags'])
+@require(['arch_list', FLAGS])
 def arch_check(opts, continuation=language_check):
     # type: (...) -> Dict[str, Any]
     """ Do run analyzer through one of the given architectures. """
@@ -387,7 +390,7 @@ def arch_check(opts, continuation=language_check):
             current = filtered_list.pop()
             logging.debug('analysis, on arch: %s', current)
 
-            opts.update({'flags': ['-arch', current] + opts['flags']})
+            opts.update({FLAGS: ['-arch', current] + opts[FLAGS]})
             return continuation(opts)
         logging.debug('skip analysis, found not supported arch')
         return dict()
@@ -421,7 +424,7 @@ IGNORED_FLAGS = {
 }  # type: Dict[str, int]
 
 
-@require(['flags'])
+@require([FLAGS])
 def classify_parameters(opts, continuation=arch_check):
     # type: (...) -> Dict[str, Any]
     """ Prepare compiler flags (filters some and add others) and take out
@@ -429,13 +432,13 @@ def classify_parameters(opts, continuation=arch_check):
 
     # the result of the method
     result = {
-        'flags': [],  # the filtered compiler flags
+        FLAGS: [],  # the filtered compiler flags
         'arch_list': [],  # list of architecture flags
         'language': None,  # compilation language, None, if not specified
     }  # type: Dict[str, Any]
 
     # iterate on the compile options
-    args = iter(opts['flags'])
+    args = iter(opts[FLAGS])
     for arg in args:
         # take arch flags into a separate basket
         if arg == '-arch':
@@ -454,14 +457,69 @@ def classify_parameters(opts, continuation=arch_check):
             pass
         # and consider everything else as compilation flag.
         else:
-            result['flags'].append(arg)
+            result[FLAGS].append(arg)
 
     opts.update(result)
     return continuation(opts)
 
 
-@require(['source', 'excludes'])
-def exclude(opts, continuation=classify_parameters):
+# Known C compiler executable name patterns.
+COMPILERS_CC = (
+    re.compile(r'^([^-]*-)*[mg]cc(-\d+(\.\d+){0,2})?$'),
+    re.compile(r'^([^-]*-)*clang(-\d+(\.\d+){0,2})?$'),
+    re.compile(r'^(i|)cc$'),
+    re.compile(r'^(g|)xlc$'),
+)
+
+
+# Known C++ compiler executable name patterns.
+COMPILERS_CXX = (
+    re.compile(r'^(c\+\+|cxx|CC)$'),
+    re.compile(r'^([^-]*-)*[mg]\+\+(-\d+(\.\d+){0,2})?$'),
+    re.compile(r'^([^-]*-)*clang\+\+(-\d+(\.\d+){0,2})?$'),
+    re.compile(r'^icpc$'),
+    re.compile(r'^(g|)xl(C|c\+\+)$'),
+)
+
+
+@require([ARGUMENTS])
+def compiler_name(opts, continuation=classify_parameters):
+    # type: (...) -> Dict[str, Any]
+    """ Guess the language from compiler name. """
+
+    def is_c_compiler(cmd):
+        # type: (str) -> bool
+        return any(pattern.match(cmd) for pattern in COMPILERS_CC)
+
+    def is_cxx_compiler(cmd):
+        # type: (str) -> bool
+        return any(pattern.match(cmd) for pattern in COMPILERS_CXX)
+
+    def compiler_type(executable):
+        # type: (str) -> Optional[str]
+        cmd = os.path.basename(executable)
+        if is_c_compiler(cmd):
+            return 'c'
+        elif is_cxx_compiler(cmd):
+            return 'c++'
+        else:
+            return None
+
+    arguments = opts.pop(ARGUMENTS)
+    if len(arguments) < 2:
+        logging.warning('Invalid entry (command length)')
+        return dict()
+
+    opts.update({
+        FLAGS: arguments[1:],
+        'compiler': compiler_type(arguments[0])
+    })
+
+    return continuation(opts)
+
+
+@require([SOURCE, EXCLUDES])
+def exclude(opts, continuation=compiler_name):
     # type: (...) -> Dict[str, Any]
     """ Analysis might be skipped, when one of the requested excluded
     directory contains the file. """
@@ -475,7 +533,62 @@ def exclude(opts, continuation=classify_parameters):
         relative = os.path.relpath(entry, directory).split(os.sep)
         return len(relative) > 0 and relative[0] != os.pardir
 
-    if any(contains(dir, opts['source']) for dir in opts['excludes']):
+    if any(contains(dir, opts[SOURCE]) for dir in opts[EXCLUDES]):
         logging.debug('skip analysis, file requested to exclude')
         return dict()
     return continuation(opts)
+
+
+@require([DIRECTORY, SOURCE])
+def validate_db_entry(opts, continuation=exclude):
+    # type: (...) -> Dict[str, Any]
+    """ Validate compilation database input entry. """
+
+    if COMMAND in opts:
+        command = opts.pop(COMMAND)
+        arguments = shell_split(command)
+        opts.update({ARGUMENTS: arguments})
+    elif ARGUMENTS in opts:
+        pass
+    else:
+        logging.warning('Invalid entry (missing command)')
+        return dict()
+
+    opts.update({
+        DIRECTORY: os.path.normpath(opts[DIRECTORY]),
+        SOURCE: os.path.normpath(opts[SOURCE])
+    })
+
+    return continuation(opts)
+
+
+def classify_source(filename, c_compiler=True):
+    # type: (str, bool) -> str
+    """ Classify source file names and returns the presumed language,
+    based on the file name extension.
+
+    :param filename:    the source file name
+    :param c_compiler:  indicate that the compiler is a C compiler,
+    :return: the language from file name extension. """
+
+    mapping = {
+        '.c': 'c' if c_compiler else 'c++',
+        '.i': 'c-cpp-output' if c_compiler else 'c++-cpp-output',
+        '.ii': 'c++-cpp-output',
+        '.m': 'objective-c',
+        '.mi': 'objective-c-cpp-output',
+        '.mm': 'objective-c++',
+        '.mii': 'objective-c++-cpp-output',
+        '.C': 'c++',
+        '.cc': 'c++',
+        '.CC': 'c++',
+        '.cp': 'c++',
+        '.cpp': 'c++',
+        '.cxx': 'c++',
+        '.c++': 'c++',
+        '.C++': 'c++',
+        '.txx': 'c++'
+    }
+
+    __, extension = os.path.splitext(os.path.basename(filename))
+    return mapping.get(extension)
