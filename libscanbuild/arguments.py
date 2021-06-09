@@ -162,10 +162,10 @@ def create_analyze_parser(from_build_command):
     """ Creates a parser for command-line arguments to 'analyze'. """
 
     parser = create_default_parser()
+    parser_add_compilers(parser)
 
     if from_build_command:
         parser_add_prefer_wrapper(parser)
-        parser_add_compilers(parser)
 
         parser.add_argument(
             '--intercept-first',

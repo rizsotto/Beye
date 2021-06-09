@@ -136,7 +136,7 @@ class Compilation:
         }
 
     @classmethod
-    def from_db_entry(cls, entry):
+    def from_db_entry(cls, entry, cc, cxx):
         # type: (Type[Compilation], Dict[str, str]) -> Iterable[Compilation]
         """ Parser method for compilation entry.
 
@@ -148,7 +148,7 @@ class Compilation:
         command = shell_split(entry['command']) if 'command' in entry else \
             entry['arguments']
         execution = Execution(cmd=command, cwd=entry['directory'], pid=0)
-        return cls.iter_from_execution(execution)
+        return cls.iter_from_execution(execution, cc=cc, cxx=cxx)
 
     @classmethod
     def iter_from_execution(cls,        # type: Type[Compilation]
@@ -293,7 +293,7 @@ class CompilationDatabase:
             json.dump(entries, handle, sort_keys=True, indent=4)
 
     @staticmethod
-    def load(filename):
+    def load(filename, cc='cc', cxx='c++'):
         # type: (str) -> Iterable[Compilation]
         """ Load compilations from file.
 
@@ -302,7 +302,7 @@ class CompilationDatabase:
 
         with open(filename, 'r') as handle:
             for entry in json.load(handle):
-                for compilation in Compilation.from_db_entry(entry):
+                for compilation in Compilation.from_db_entry(entry, cc=cc, cxx=cxx):
                     yield compilation
 
 

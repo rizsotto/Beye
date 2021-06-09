@@ -43,7 +43,6 @@ COMPILER_WRAPPER_CC = 'analyze-cc'
 COMPILER_WRAPPER_CXX = 'analyze-c++'
 ENVIRONMENT_KEY = 'ANALYZE_BUILD'
 
-
 @command_entry_point
 def scan_build():
     # type: () -> int
@@ -81,7 +80,7 @@ def analyze_build():
     # will re-assign the report directory as new output
     with report_directory(args.output, args.keep_empty) as args.output:
         # run the analyzer against a compilation db
-        compilations = CompilationDatabase.load(args.cdb)
+        compilations = CompilationDatabase.load(args.cdb, cc=args.cc, cxx=args.cxx)
         run_analyzer_parallel(compilations, args)
         # cover report generation and bug counting
         number_of_bugs = document(args)
@@ -302,7 +301,6 @@ def run(opts):
     that the needed parameters received. (This is done by the 'require'
     decorator. It's like an 'assert' to check the contract between the
     caller and the called method.) """
-
     command = [opts['compiler'], '-c'] + opts['flags'] + [opts['source']]
     logging.debug("Run analyzer against '%s'", command)
     return exclude(opts)
