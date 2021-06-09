@@ -93,7 +93,10 @@ def reconfigure_logging(verbose_level):
 
     root = logging.getLogger()
     # tune level
-    level = logging.WARNING - min(logging.WARNING, (10 * verbose_level))
+    if verbose_level == -1:
+        level = logging.ERROR
+    else:
+        level = logging.WARNING - min(logging.WARNING, (10 * verbose_level))
     root.setLevel(level)
     # be verbose with messages
     if verbose_level <= 3:

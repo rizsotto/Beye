@@ -30,6 +30,15 @@ __all__ = ['parse_args_for_intercept_build', 'parse_args_for_analyze_build',
            'parse_args_for_scan_build']
 
 
+def get_verbosity(args):
+    """The number of -v flags, or -1 if -q was used."""
+    verbosity = args.verbose
+    if verbosity == 0 and args.quiet:
+        # -q should only be considered if -v was not used
+        verbosity = -1
+    return verbosity
+
+
 def parse_args_for_intercept_build():
     # type: () -> argparse.Namespace
     """ Parse and validate command-line arguments for intercept-build. """
@@ -37,7 +46,7 @@ def parse_args_for_intercept_build():
     parser = create_intercept_parser()
     args = parser.parse_args()
 
-    reconfigure_logging(args.verbose)
+    reconfigure_logging(get_verbosity(args))
     logging.debug('Raw arguments %s', sys.argv)
 
     # short validation logic
@@ -56,7 +65,7 @@ def parse_args_for_analyze_build():
     parser = create_analyze_parser(from_build_command)
     args = parser.parse_args()
 
-    reconfigure_logging(args.verbose)
+    reconfigure_logging(get_verbosity(args))
     logging.debug('Raw arguments %s', sys.argv)
 
     normalize_args_for_analyze(args, from_build_command)
@@ -73,7 +82,7 @@ def parse_args_for_scan_build():
     parser = create_analyze_parser(from_build_command)
     args = parser.parse_args()
 
-    reconfigure_logging(args.verbose)
+    reconfigure_logging(get_verbosity(args))
     logging.debug('Raw arguments %s', sys.argv)
 
     normalize_args_for_analyze(args, from_build_command)
@@ -378,6 +387,11 @@ def create_default_parser():
         default=0,
         help="""Enable verbose output from '%(prog)s'. A second, third and
         fourth flags increases verbosity.""")
+    parser.add_argument(
+        '--quiet',
+        '-q',
+        action='store_true',
+        help="Be less verbose (only show error output).")
     return parser
 
 
