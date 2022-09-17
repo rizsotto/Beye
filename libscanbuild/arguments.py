@@ -426,6 +426,13 @@ def parser_add_compilers(parser):
         dest='cxx',
         default=os.getenv('CXX', 'c++'),
         help="""This is the same as "--use-cc" but for C++ code.""")
+    parser.add_argument(
+        '--intercept-lib-cc',
+        metavar="<path>",
+        dest='libear_cc',
+        help="""The compiler for building interception library, defaulted to
+        the value of "--use-cc"."""
+    )
 
 
 class AppendCommaSeparated(argparse.Action):

@@ -125,7 +125,8 @@ def setup_environment(args, destination):
             'CXX': COMPILER_WRAPPER_CXX,
         })
     else:
-        intercept_library = build_libear(args.cc, destination)
+        libear_cc = args.libear_cc if 'libear_cc' in args else args.cc
+        intercept_library = build_libear(libear_cc, destination)
         if sys.platform == 'darwin':
             environment.update({
                 'DYLD_INSERT_LIBRARIES': intercept_library,
